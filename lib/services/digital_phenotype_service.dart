@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:math';
+import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'models/digital_phenotype.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// Servicio para recopilar y analizar datos de Digital Phenotyping
-/// Detecta cambios de estado usando patrones pasivos del usuario
+/// Los datos se envían a una colección ANÓNIMA separada para investigación
 class DigitalPhenotypeService {
   static final DigitalPhenotypeService _instance = DigitalPhenotypeService._internal();
   factory DigitalPhenotypeService() => _instance;
@@ -17,31 +19,48 @@ class DigitalPhenotypeService {
   static const double _sleepThreshold = 5.0; // horas
   static const double _activityLowThreshold = 3.0;
   static const double _activityHighThreshold = 8.0;
-  static const int _usageFragmentationThreshold = 50; // cambios de app por hora
+  static const int _usageFragmentationThreshold = 50;
 
   Timer? _collectionTimer;
   bool _isEnabled = false;
+  bool _userConsent = false; // Consentimiento del usuario
+  String? _anonymousId; // ID pseudo-anónimo único
   List<PhenotypeDataPoint> _dataPoints = [];
 
-  // Stream para notificar cambios de estado detectados
   final _stateChangeStream = StreamController<StateChangeEvent>.broadcast();
   Stream<StateChangeEvent> get onStateChange => _stateChangeStream.stream;
 
-  /// Iniciar recopilación de datos
+  /// Inicializar con consentimiento del usuario
+  Future<void> initialize({required bool userConsent}) async {
+    _userConsent = userConsent;
+    await _loadOrGenerateAnonymousId();
+  }
+
+  /// Generar o cargar ID pseudo-anónimo
+  Future<void> _loadOrGenerateAnonymousId() async {
+    final prefs = await SharedPreferences.getInstance();
+    _anonymousId = prefs.getString('phenotype_anonymous_id');
+    
+    if (_anonymousId == null) {
+      // Generar ID aleatorio único
+      _anonymousId = 'phenotype_${base64UrlEncode utf8.encode(DateTime.now().millisecondsSinceEpoch.toString())}_${Random.secure().nextInt(1000000)}';
+      await prefs.setString('phenotype_anonymous_id', _anonymousId!);
+    }
+  }
+
+  /// Iniciar recopilación (solo si hay consentimiento)
   Future<void> startCollecting() async {
-    if (_isEnabled) return;
+    if (!_userConsent || _isEnabled) return;
     
     _isEnabled = true;
     _loadHistoricalData();
     
-    // Iniciar timer de recopilación periódica
     _collectionTimer = Timer.periodic(
       _collectionInterval,
-      (_) => _collectDataPoint(),
+      (_) => _collectAndUploadData(),
     );
     
-    // Recopilar dato inicial
-    await _collectDataPoint();
+    await _collectAndUploadData();
   }
 
   /// Detener recopilación
@@ -51,11 +70,12 @@ class DigitalPhenotypeService {
     _collectionTimer = null;
   }
 
-  /// Recopilar un punto de datos
-  Future<void> _collectDataPoint() async {
-    if (!_isEnabled) return;
+  /// Recopilar datos y subir a colección ANÓNIMA
+  Future<void> _collectAndUploadData() async {
+    if (!_isEnabled || !_userConsent) return;
 
     final dataPoint = PhenotypeDataPoint(
+      anonymousId: _anonymousId!, // ID pseudo-anónimo
       timestamp: DateTime.now(),
       sleepHours: await _getSleepHours(),
       activityLevel: await _getActivityLevel(),
@@ -66,17 +86,32 @@ class DigitalPhenotypeService {
     );
 
     _dataPoints.add(dataPoint);
-    _saveHistoricalData();
+    _saveHistoricalDataLocal();
 
-    // Analizar patrones y detectar cambios
+    // Subir a Firestore en colección ANÓNIMA
+    await _uploadToAnonymizedCollection(dataPoint);
+
+    // Analizar patrones localmente
     await _analyzePatterns(dataPoint);
   }
 
-  /// Analizar patrones y detectar cambios de estado
+  /// Subir a colección separada y anonimizada
+  Future<void> _uploadToAnonymizedCollection(PhenotypeDataPoint data) async {
+    try {
+      await FirebaseFirestore.instance
+          .collection('anonymized_phenotypes')
+          .doc(_anonymousId)
+          .collection('data_points')
+          .add(data.toAnonymizedJson());
+    } catch (e) {
+      print('Error uploading anonymized data: $e');
+    }
+  }
+
+  /// Analizar patrones y detectar cambios
   Future<void> _analyzePatterns(PhenotypeDataPoint currentPoint) async {
     if (_dataPoints.length < 3) return;
 
-    // Obtener promedio de las últimas 24 horas (96 puntos de 15 min)
     final last24Hours = _dataPoints
         .where((p) => p.timestamp.isAfter(DateTime.now().subtract(Duration(hours: 24))))
         .toList();
@@ -87,10 +122,9 @@ class DigitalPhenotypeService {
     final avgActivity = last24Hours.map((p) => p.activityLevel).reduce((a, b) => a + b) / last24Hours.length;
     final avgScreenTime = last24Hours.map((p) => p.screenTimeMinutes).reduce((a, b) => a + b) / last24Hours.length;
 
-    // Detectar cambios significativos
     StateChangeEvent? event;
 
-    // Hipomanía/estado elevado: menos sueño + más actividad + más tiempo de pantalla
+    // Estado elevado
     if (currentPoint.sleepHours < avgSleep * 0.8 &&
         currentPoint.activityLevel > avgActivity * 1.3 &&
         currentPoint.screenTimeMinutes > avgScreenTime * 1.5) {
@@ -102,7 +136,7 @@ class DigitalPhenotypeService {
         indicators: _getElevatedIndicators(currentPoint, last24Hours),
       );
     }
-    // Depresión: más sueño + menos actividad + menos interacción social
+    // Estado depresivo
     else if (currentPoint.sleepHours > avgSleep * 1.2 &&
         currentPoint.activityLevel < avgActivity * 0.7 &&
         currentPoint.socialInteractionScore < 0.4) {
@@ -115,18 +149,12 @@ class DigitalPhenotypeService {
       );
     }
 
-    // Notificar cambio si se detectó
     if (event != null) {
       _stateChangeStream.add(event);
     }
   }
 
-  /// Calcular confianza de la detección
-  double _calculateConfidence(
-    PhenotypeDataPoint current,
-    List<PhenotypeDataPoint> historical,
-  ) {
-    // Entre más datos históricos y más extremo el cambio, mayor confianza
+  double _calculateConfidence(PhenotypeDataPoint current, List<PhenotypeDataPoint> historical) {
     final sleepChange = (current.sleepHours - _getAverage(historical, (p) => p.sleepHours)) /
         _getAverage(historical, (p) => p.sleepHours);
     final activityChange = (current.activityLevel - _getAverage(historical, (p) => p.activityLevel)) /
@@ -138,21 +166,17 @@ class DigitalPhenotypeService {
     return (baseConfidence + changeBonus).clamp(0.0, 1.0);
   }
 
-  /// Obtener indicadores de estado elevado
-  List<String> _getElevatedIndicators(
-    PhenotypeDataPoint current,
-    List<PhenotypeDataPoint> historical,
-  ) {
+  List<String> _getElevatedIndicators(PhenotypeDataPoint current, List<PhenotypeDataPoint> historical) {
     final indicators = <String>[];
     final avgSleep = _getAverage(historical, (p) => p.sleepHours);
     final avgActivity = _getAverage(historical, (p) => p.activityLevel);
     final avgScreen = _getAverage(historical, (p) => p.screenTimeMinutes);
 
     if (current.sleepHours < avgSleep * 0.8) {
-      indicators.add('Reducción de sueño (${(avgSleep - current.sleepHours).toStringAsFixed(1)}h menos)');
+      indicators.add('Reducción de sueño');
     }
     if (current.activityLevel > avgActivity * 1.3) {
-      indicators.add('Aumento de actividad (${((current.activityLevel / avgActivity - 1) * 100).toStringAsFixed(0)}% más)');
+      indicators.add('Aumento de actividad');
     }
     if (current.screenTimeMinutes > avgScreen * 1.5) {
       indicators.add('Mayor tiempo de pantalla');
@@ -161,18 +185,14 @@ class DigitalPhenotypeService {
     return indicators;
   }
 
-  /// Obtener indicadores de estado depresivo
-  List<String> _getDepressiveIndicators(
-    PhenotypeDataPoint current,
-    List<PhenotypeDataPoint> historical,
-  ) {
+  List<String> _getDepressiveIndicators(PhenotypeDataPoint current, List<PhenotypeDataPoint> historical) {
     final indicators = <String>[];
     final avgSleep = _getAverage(historical, (p) => p.sleepHours);
     final avgActivity = _getAverage(historical, (p) => p.activityLevel);
     final avgSocial = _getAverage(historical, (p) => p.socialInteractionScore);
 
     if (current.sleepHours > avgSleep * 1.2) {
-      indicators.add('Aumento de sueño (${(current.sleepHours - avgSleep).toStringAsFixed(1)}h más)');
+      indicators.add('Aumento de sueño');
     }
     if (current.activityLevel < avgActivity * 0.7) {
       indicators.add('Reducción de actividad');
@@ -189,41 +209,15 @@ class DigitalPhenotypeService {
     return data.map(extractor).reduce((a, b) => a + b) / data.length;
   }
 
-  // ========== MÉTODOS DE RECOPILACIÓN DE DATOS ==========
-  // Estos son placeholders - en producción necesitarían integración real
+  // ========== PLACEHOLDERS PARA DATOS ==========
+  Future<double> _getSleepHours() async => Random().nextDouble() * 4 + 5;
+  Future<double> _getActivityLevel() async => Random().nextDouble() * 5 + 3;
+  Future<int> _getScreenTime() async => Random().nextInt(180) + 60;
+  Future<int> _getAppUsagePattern() async => Random().nextInt(40) + 20;
+  Future<int> _getLocationChanges() async => Random().nextInt(5);
+  Future<double> _getSocialScore() async => Random().nextDouble();
 
-  Future<double> _getSleepHours() async {
-    // En producción: obtener de HealthKit / Google Fit
-    return Random().nextDouble() * 4 + 5; // 5-9 horas aleatorio
-  }
-
-  Future<double> _getActivityLevel() async {
-    // En producción: obtener de accelerómetro / pasos
-    return Random().nextDouble() * 5 + 3; // 3-8 nivel aleatorio
-  }
-
-  Future<int> _getScreenTime() async {
-    // En producción: obtener de UsageStatsManager
-    return Random().nextInt(180) + 60; // 1-4 horas
-  }
-
-  Future<int> _getAppUsagePattern() async {
-    // Número de cambios de app por hora
-    return Random().nextInt(40) + 20;
-  }
-
-  Future<int> _getLocationChanges() async {
-    // Cambios de ubicación significativos
-    return Random().nextInt(5);
-  }
-
-  Future<double> _getSocialScore() async {
-    // Puntuación de interacción social (llamadas, mensajes, etc.)
-    return Random().nextDouble();
-  }
-
-  // ========== PERSISTENCIA ==========
-
+  // ========== PERSISTENCIA LOCAL ==========
   Future<void> _loadHistoricalData() async {
     final prefs = await SharedPreferences.getInstance();
     final data = prefs.getStringList('phenotype_data');
@@ -235,7 +229,7 @@ class DigitalPhenotypeService {
     }
   }
 
-  Future<void> _saveHistoricalData() async {
+  Future<void> _saveHistoricalDataLocal() async {
     final prefs = await SharedPreferences.getInstance();
     final jsonData = _dataPoints
         .where((p) => p.timestamp.isAfter(DateTime.now().subtract(Duration(days: 7))))
@@ -244,14 +238,12 @@ class DigitalPhenotypeService {
     await prefs.setStringList('phenotype_data', jsonData);
   }
 
-  /// Obtener datos históricos para análisis
   List<PhenotypeDataPoint> getHistoricalData({int days = 7}) {
     final cutoff = DateTime.now().subtract(Duration(days: days));
     return _dataPoints.where((p) => p.timestamp.isAfter(cutoff)).toList()
       ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
   }
 
-  /// Obtener estado actual estimado
   PhenotypeState getCurrentState() {
     if (_dataPoints.length < 10) return PhenotypeState.unknown;
 
@@ -261,7 +253,6 @@ class DigitalPhenotypeService {
     final avgSleep = last24Hours.map((p) => p.sleepHours).reduce((a, b) => a + b) / last24Hours.length;
     final avgActivity = last24Hours.map((p) => p.activityLevel).reduce((a, b) => a + b) / last24Hours.length;
 
-    // Estado baseline del usuario (promedio histórico)
     final baseline = getHistoricalData(days: 7);
     final baselineSleep = baseline.map((p) => p.sleepHours).reduce((a, b) => a + b) / baseline.length;
     final baselineActivity = baseline.map((p) => p.activityLevel).reduce((a, b) => a + b) / baseline.length;
@@ -275,7 +266,6 @@ class DigitalPhenotypeService {
     return PhenotypeState.stable;
   }
 
-  /// Dispose
   void dispose() {
     stopCollecting();
     _stateChangeStream.close();

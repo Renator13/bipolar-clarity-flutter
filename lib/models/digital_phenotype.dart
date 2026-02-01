@@ -1,17 +1,19 @@
 /// Modelo de datos para Digital Phenotyping
-/// Representa un punto de datos recopilado en un momento específico
+/// Representa un punto de datos anonimizado para investigación
 class PhenotypeDataPoint {
   final String id;
+  final String anonymousId; // ID pseudo-anónimo (NO datos personales)
   final DateTime timestamp;
-  final double sleepHours;          // Horas de sueño
-  final double activityLevel;       // Nivel de actividad (0-10)
-  final int screenTimeMinutes;      // Tiempo de pantalla en minutos
-  final int appUsagePattern;        // Patrón de uso de apps (cambios/hora)
-  final int locationChanges;        // Cambios de ubicación
-  final double socialInteractionScore; // 0-1 puntuación de interacción social
+  final double sleepHours;
+  final double activityLevel;
+  final int screenTimeMinutes;
+  final int appUsagePattern;
+  final int locationChanges;
+  final double socialInteractionScore;
 
   PhenotypeDataPoint({
     String? id,
+    required this.anonymousId,
     required this.timestamp,
     required this.sleepHours,
     required this.activityLevel,
@@ -21,10 +23,11 @@ class PhenotypeDataPoint {
     required this.socialInteractionScore,
   }) : id = id ?? '${timestamp.millisecondsSinceEpoch}_${DateTime.now().hashCode}';
 
-  /// Convertir a Map para almacenamiento
+  /// Convertir a JSON para almacenamiento local (con anonymousId)
   Map<String, dynamic> toJson() {
     return {
       'id': id,
+      'anonymousId': anonymousId,
       'timestamp': timestamp.toIso8601String(),
       'sleepHours': sleepHours,
       'activityLevel': activityLevel,
@@ -35,11 +38,27 @@ class PhenotypeDataPoint {
     };
   }
 
-  /// Crear desde Map
+  /// Convertir a JSON ANONIMIZADO para Firestore (sin datos personales)
+  Map<String, dynamic> toAnonymizedJson() {
+    return {
+      'anonymousId': anonymousId, // ID pseudo-anónimo solo
+      'timestamp': timestamp.toIso8601String(),
+      'sleepHours': sleepHours,
+      'activityLevel': activityLevel,
+      'screenTimeMinutes': screenTimeMinutes,
+      'appUsagePattern': appUsagePattern,
+      'locationChanges': locationChanges,
+      'socialInteractionScore': socialInteractionScore,
+      // SIN: email, nombre, teléfono, o cualquier dato personal
+    };
+  }
+
+  /// Crear desde JSON local
   factory PhenotypeDataPoint.fromJson(String jsonStr) {
     final Map<String, dynamic> map = Map<String, dynamic>.from(jsonDecode(jsonStr));
     return PhenotypeDataPoint(
       id: map['id'],
+      anonymousId: map['anonymousId'],
       timestamp: DateTime.parse(map['timestamp']),
       sleepHours: map['sleepHours'].toDouble(),
       activityLevel: map['activityLevel'].toDouble(),
@@ -53,6 +72,7 @@ class PhenotypeDataPoint {
   /// Clonar con modificaciones
   PhenotypeDataPoint copyWith({
     String? id,
+    String? anonymousId,
     DateTime? timestamp,
     double? sleepHours,
     double? activityLevel,
@@ -63,6 +83,7 @@ class PhenotypeDataPoint {
   }) {
     return PhenotypeDataPoint(
       id: id ?? this.id,
+      anonymousId: anonymousId ?? this.anonymousId,
       timestamp: timestamp ?? this.timestamp,
       sleepHours: sleepHours ?? this.sleepHours,
       activityLevel: activityLevel ?? this.activityLevel,

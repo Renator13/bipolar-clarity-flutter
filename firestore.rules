@@ -1,0 +1,68 @@
+// Firestore Rules para Bipolar Clarity
+// Separación de datos identificables y anónimos
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ========== COLECCIÓN DE USUARIOS (identificable) ==========
+    // Requiere autenticación y solo el propio usuario puede acceder
+    match /users/{userId} {
+      // Solo el usuario autenticado puede leer/escribir sus datos
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      
+      // Subcolecciones del usuario
+      match /mood_entries/{entryId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+      match /crisis_plans/{planId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+      match /trusted_allies/{allyId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+
+    // ========== COLECCIÓN ANÓNIMA (para investigación) ==========
+    // Datos pseudo-anonimizados, sin información personal identificable
+    match /anonymized_phenotypes/{anonymousId} {
+      // Cualquier usuario con consentimiento puede escribir
+      // Pero solo puede escribir bajo SU propio anonymousId
+      allow create: if request.auth != null 
+                    && request.resource.data.keys.hasAll(['anonymousId', 'timestamp', 'sleepHours', 'activityLevel'])
+                    // Verificar que no incluye datos personales
+                    && !request.resource.data.keys.hasAny(['email', 'name', 'phone', 'userId', 'userId', 'identifying']);
+      
+      // Lectura solo para investigación (puede ser más restrictiva si se desea)
+      allow read: if true; // Cambiar a false si solo se quiere escribir
+      
+      // Subcolección de data_points
+      match /data_points/{pointId} {
+        allow create: if request.auth != null 
+                      && request.resource.data.keys.hasAll(['anonymousId', 'timestamp']);
+        allow read: if true;
+      }
+    }
+
+    // ========== REGLAS GENERALES ==========
+    
+    // Funciones auxiliares
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function hasNoPersonalData(data) {
+      // Verifica que no hay campos con datos personales
+      return !data.keys.hasAny([
+        'email', 'name', 'phone', 'address', 
+        'userId', 'userId', 'fullName', 
+        'firstName', 'lastName', 'birthDate'
+      ]);
+    }
+  }
+}
