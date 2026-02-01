@@ -8,6 +8,7 @@ import '../screens/mood_checkin/mood_checkin_screen.dart';
 import '../screens/insights/insights_screen.dart';
 import '../screens/insights/digital_phenotype_screen.dart';
 import '../screens/insights/calendar_screen.dart';
+import '../screens/onboarding/consent_phenotype_screen.dart';
 import '../screens/settings/settings_screen.dart';
 import '../screens/profile/profile_screen.dart';
 import '../screens/crisis/crisis_plan_screen.dart';
@@ -139,6 +140,12 @@ class AppRouter {
               path: 'consent',
               name: 'onboarding-consent',
               builder: (context, state) => const OnboardingConsentScreen(),
+            ),
+            /// Digital Phenotype consent screen
+            GoRoute(
+              path: 'phenotype-consent',
+              name: 'phenotype-consent',
+              builder: (context, state) => const ConsentScreen(),
             ),
           ],
         ),
@@ -275,6 +282,7 @@ class RouteNames {
   static const onboardingPermissions = 'onboarding-permissions';
   static const onboardingNotifications = 'onboarding-notifications';
   static const onboardingConsent = 'onboarding-consent';
+  static const phenotypeConsent = 'phenotype-consent';
   
   // Auth
   static const login = 'login';
