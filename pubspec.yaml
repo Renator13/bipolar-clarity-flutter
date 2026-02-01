@@ -1,0 +1,80 @@
+name: bipolar_clarity
+description: A comprehensive mental health tracking application for individuals with bipolar disorder
+
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Material 3 Design
+  material_color_utilities: ^0.5.0
+
+  # State Management - Provider
+  provider: ^6.0.5
+
+  # Firebase Core
+  firebase_core: ^2.24.2
+  firebase_auth: ^4.16.0
+  cloud_firestore: ^4.14.0
+  firebase_analytics: ^10.8.0
+
+  # Auth0 Integration
+  auth0_flutter: ^2.0.0
+
+  # Charts and Visualization
+  fl_chart: ^0.63.0
+  charts_flutter: ^0.12.0
+
+  # UI Components
+  flutter_local_notifications: ^16.3.0
+  shared_preferences: ^2.2.2
+  url_launcher: ^6.2.1
+  package_info: ^2.2.0
+
+  # Date/Time Handling
+  intl: ^0.18.1
+
+  # HTTP Requests
+  http: ^1.1.0
+
+  # Icons
+  cupertino_icons: ^1.0.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.1
+  flutter_native_splash: ^2.3.9
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/
+    - assets/icons/
+
+  fonts:
+    - family: Poppins
+      fonts:
+        - asset: assets/fonts/Poppins-Regular.ttf
+        - asset: assets/fonts/Poppins-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Poppins-SemiBold.ttf
+          weight: 600
+
+  # Configuration for Firebase and Auth0
+  # These values should be configured in .env or through build args
+  flavor:
+    prod:
+      APP_NAME: "Bipolar Clarity"
+      FIREBASE_API_KEY: "${FIREBASE_API_KEY}"
+      FIREBASE_AUTH_DOMAIN: "${FIREBASE_AUTH_DOMAIN}"
+      FIREBASE_PROJECT_ID: "${FIREBASE_PROJECT_ID}"
+      AUTH0_DOMAIN: "${AUTH0_DOMAIN}"
+      AUTH0_CLIENT_ID: "${AUTH0_CLIENT_ID}"
