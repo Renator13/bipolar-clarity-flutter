@@ -7,6 +7,7 @@ import '../screens/dashboard/dashboard_screen.dart';
 import '../screens/mood_checkin/mood_checkin_screen.dart';
 import '../screens/insights/insights_screen.dart';
 import '../screens/insights/digital_phenotype_screen.dart';
+import '../screens/insights/calendar_screen.dart';
 import '../screens/settings/settings_screen.dart';
 import '../screens/profile/profile_screen.dart';
 import '../screens/crisis/crisis_plan_screen.dart';
@@ -186,6 +187,12 @@ class AppRouter {
               name: 'digital-phenotype',
               builder: (context, state) => const DigitalPhenotypeScreen(),
             ),
+            /// Calendar screen
+            GoRoute(
+              path: 'calendar',
+              name: 'calendar',
+              builder: (context, state) => const CalendarScreen(),
+            ),
           ],
         ),
         
@@ -279,6 +286,7 @@ class RouteNames {
   static const checkIn = 'check-in';
   static const insights = 'insights';
   static const digitalPhenotype = 'digital-phenotype';
+  static const calendar = 'calendar';
   static const settings = 'settings';
   static const profile = 'profile';
   static const crisisPlan = 'crisis-plan';
