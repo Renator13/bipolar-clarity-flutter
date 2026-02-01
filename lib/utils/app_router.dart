@@ -6,6 +6,7 @@ import '../screens/auth/register_screen.dart';
 import '../screens/dashboard/dashboard_screen.dart';
 import '../screens/mood_checkin/mood_checkin_screen.dart';
 import '../screens/insights/insights_screen.dart';
+import '../screens/insights/digital_phenotype_screen.dart';
 import '../screens/settings/settings_screen.dart';
 import '../screens/profile/profile_screen.dart';
 import '../screens/crisis/crisis_plan_screen.dart';
@@ -178,6 +179,14 @@ class AppRouter {
           path: '/insights',
           name: 'insights',
           builder: (context, state) => const InsightsScreen(),
+          routes: [
+            /// Digital Phenotype screen
+            GoRoute(
+              path: 'digital-phenotype',
+              name: 'digital-phenotype',
+              builder: (context, state) => const DigitalPhenotypeScreen(),
+            ),
+          ],
         ),
         
         /// User settings screen
@@ -269,6 +278,7 @@ class RouteNames {
   static const dashboardOffline = 'dashboard-offline';
   static const checkIn = 'check-in';
   static const insights = 'insights';
+  static const digitalPhenotype = 'digital-phenotype';
   static const settings = 'settings';
   static const profile = 'profile';
   static const crisisPlan = 'crisis-plan';
