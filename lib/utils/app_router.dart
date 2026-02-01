@@ -7,6 +7,10 @@ import '../screens/dashboard/dashboard_screen.dart';
 import '../screens/mood_checkin/mood_checkin_screen.dart';
 import '../screens/insights/insights_screen.dart';
 import '../screens/settings/settings_screen.dart';
+import '../screens/profile/profile_screen.dart';
+import '../screens/crisis/crisis_plan_screen.dart';
+import '../screens/trusted_ally/trusted_ally_screen.dart';
+import '../screens/dashboard/dashboard_offline_screen.dart';
 import '../screens/emergency_contact/emergency_contact_screen.dart';
 import '../screens/admin/admin_dashboard_screen.dart';
 import '../services/auth_service.dart';
@@ -191,6 +195,34 @@ class AppRouter {
           ],
         ),
         
+        /// User profile screen
+        GoRoute(
+          path: '/profile',
+          name: 'profile',
+          builder: (context, state) => const ProfileScreen(),
+        ),
+        
+        /// Crisis plan screen
+        GoRoute(
+          path: '/crisis-plan',
+          name: 'crisis-plan',
+          builder: (context, state) => const CrisisPlanScreen(),
+        ),
+        
+        /// Trusted allies screen
+        GoRoute(
+          path: '/trusted-ally',
+          name: 'trusted-ally',
+          builder: (context, state) => const TrustedAllyScreen(),
+        ),
+        
+        /// Dashboard with offline support
+        GoRoute(
+          path: '/dashboard-offline',
+          name: 'dashboard-offline',
+          builder: (context, state) => const DashboardOfflineScreen(),
+        ),
+        
         /// Admin dashboard (for René)
         GoRoute(
           path: '/admin',
@@ -234,9 +266,13 @@ class RouteNames {
   
   // Main app
   static const dashboard = 'dashboard';
+  static const dashboardOffline = 'dashboard-offline';
   static const checkIn = 'check-in';
   static const insights = 'insights';
   static const settings = 'settings';
+  static const profile = 'profile';
+  static const crisisPlan = 'crisis-plan';
+  static const trustedAlly = 'trusted-ally';
   static const emergencyContact = 'emergency-contact';
   static const admin = 'admin';
 }
